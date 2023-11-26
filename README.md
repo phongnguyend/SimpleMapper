@@ -1,1 +1,1 @@
-# SimpleAutoMapper
+# SimpleMapper
