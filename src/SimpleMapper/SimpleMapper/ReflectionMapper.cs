@@ -1,65 +1,64 @@
 ﻿using System.Reflection;
 
-namespace SimpleMapper
+namespace SimpleMapper;
+
+public class ReflectionMapper : IMapper
 {
-    public class ReflectionMapper : IMapper
+    static readonly object _lock = new();
+
+    private static readonly Dictionary<(Type From, Type To), List<(MethodInfo Get, MethodInfo Set)>> _cache = [];
+
+    private static List<(MethodInfo Get, MethodInfo Set)> GetOrAdd((Type From, Type To) key)
     {
-        static object _lock = new object();
+        if (_cache.ContainsKey(key))
+        {
+            return _cache[key];
+        }
 
-        private static Dictionary<(Type from, Type to), List<(MethodInfo Get, MethodInfo Set)>> _cache = new();
-
-        private static List<(MethodInfo Get, MethodInfo Set)> GetOrAdd((Type from, Type to) key)
+        lock (_lock)
         {
             if (_cache.ContainsKey(key))
             {
                 return _cache[key];
             }
 
-            lock (_lock)
+            var fromProps = key.From.GetProperties();
+            var toProps = key.To.GetProperties();
+
+            List<(MethodInfo, MethodInfo)> entry = new();
+            foreach (var from in fromProps)
             {
-                if (_cache.ContainsKey(key))
+                var to = toProps.FirstOrDefault(x => x.Name == from.Name);
+                if (to == null)
                 {
-                    return _cache[key];
+                    continue;
                 }
 
-                var fromProps = key.from.GetProperties();
-                var toProps = key.to.GetProperties();
-
-                List<(MethodInfo, MethodInfo)> entry = new();
-                foreach (var from in fromProps)
-                {
-                    var to = toProps.FirstOrDefault(x => x.Name == from.Name);
-                    if (to == null)
-                    {
-                        continue;
-                    }
-
-                    entry.Add((from.GetMethod, to.SetMethod));
-                }
-
-                _cache[key] = entry;
+                entry.Add((from.GetMethod, to.SetMethod));
             }
 
-            return _cache[key];
+            _cache[key] = entry;
         }
 
-        public TTarget Map<TSource, TTarget>(TSource source) where TTarget : class, new()
-        {
-            var result = new TTarget();
-            Map(source, result);
-            return result;
-        }
+        return _cache[key];
+    }
 
-        public void Map<TSource, TTarget>(TSource source, TTarget target) where TTarget : class
-        {
-            var key = (from: source.GetType(), to: typeof(TTarget));
+    public TTarget Map<TSource, TTarget>(TSource source) where TTarget : class, new()
+    {
+        var result = new TTarget();
+        Map(source, result);
+        return result;
+    }
 
-            var entry = GetOrAdd(key);
-            foreach (var (Get, Set) in entry)
-            {
-                var val = Get.Invoke(source, null);
-                Set.Invoke(target, [val]);
-            }
+    public void Map<TSource, TTarget>(TSource source, TTarget target) where TTarget : class
+    {
+        var key = (from: typeof(TSource), to: typeof(TTarget));
+
+        var entry = GetOrAdd(key);
+        foreach (var (Get, Set) in entry)
+        {
+            var val = Get.Invoke(source, null);
+            Set.Invoke(target, [val]);
         }
     }
 }

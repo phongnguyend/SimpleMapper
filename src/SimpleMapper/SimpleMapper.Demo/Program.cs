@@ -3,6 +3,7 @@
 using SimpleMapper;
 
 IMapper mapper = new ReflectionMapper();
+//IMapper mapper = new ExpressionMapper();
 
 var test1 = mapper.Map<A, B>(new A { Id = 1, Name = "abc1", Description = "xyz1" });
 
